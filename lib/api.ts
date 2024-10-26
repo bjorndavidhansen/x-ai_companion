@@ -1,4 +1,47 @@
 // This is the complete content for lib/api.ts
+import { APIError, handleAPIError } from './errors';
+
+export class APIClient {
+  private baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  
+  private async fetch<T>(path: string, options?: RequestInit): Promise<T> {
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options?.headers,
+        },
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new APIError(
+          response.status,
+          data.message || 'API request failed',
+          data.code
+        );
+      }
+
+      return response.json();
+    } catch (error) {
+      handleAPIError(error);
+    }
+  }
+
+  async fetchContent() {
+    return this.fetch('/content');
+  }
+
+  async updateTheme(contentId: string, themeId: string) {
+    return this.fetch(`/content/${contentId}/theme`, {
+      method: 'PUT',
+      body: JSON.stringify({ themeId })
+    });
+  }
+  // ... other methods
+}
+
 import { ThemeSchema, ContentSchema } from './types';
 
 export class APIClient {
