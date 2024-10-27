@@ -1,4 +1,3 @@
-// env.ts
 import { z } from 'zod';
 
 const envSchema = z.object({
@@ -11,12 +10,9 @@ const envSchema = z.object({
     .or(z.string().optional())
     .transform(val => val || 'http://localhost:3000'),
   
-  // Optional auth credentials
-  X_CLIENT_ID: z.string()
-    .optional(),
-  
-  X_CLIENT_SECRET: z.string()
-    .optional(),
+  // Auth credentials (required in production)
+  X_CLIENT_ID: z.string(),
+  X_CLIENT_SECRET: z.string(),
 
   // Environment with default
   NODE_ENV: z.enum(['development', 'production', 'test'])
@@ -42,7 +38,7 @@ export function validateEnv(): Env {
         throw new Error('APP URL is required in production');
       }
       if (!env.X_CLIENT_ID || !env.X_CLIENT_SECRET) {
-        throw new Error('Client credentials are required in production');
+        throw new Error('X client credentials are required in production');
       }
     }
 
@@ -59,6 +55,8 @@ export function validateEnv(): Env {
       return {
         NEXT_PUBLIC_API_URL: 'http://localhost:3000',
         NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+        X_CLIENT_ID: '',
+        X_CLIENT_SECRET: '',
         NODE_ENV: 'development'
       } as Env;
     }

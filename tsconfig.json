@@ -1,4 +1,3 @@
-// === tsconfig.json ===
 {
   "compilerOptions": {
     "target": "es5",
@@ -23,11 +22,21 @@
       "@/*": ["./*"],
       "@/components/*": ["./components/*"],
       "@/lib/*": ["./lib/*"],
-      "@/types/*": ["./types/*"],
+      "@/hooks/*": ["./hooks/*"],
       "@/styles/*": ["./styles/*"],
+      "@/types/*": ["./types/*"],
       "@/public/*": ["./public/*"]
-    }
+    },
+    "baseUrl": ".",
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "app"
+  ],
+  "exclude": ["node_modules"],
+  "types": ["node"]
 }

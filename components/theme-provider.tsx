@@ -1,7 +1,10 @@
 'use client';
 
 import * as React from "react";
-import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { 
+  ThemeProvider as NextThemesProvider, 
+  useTheme as useNextTheme 
+} from "next-themes";
 import { type ThemeProviderProps } from "next-themes/dist/types";
 
 // Define the available themes
@@ -49,9 +52,8 @@ export function ThemeProvider({
   // Handle forced theme for previews/emails
   const resolvedTheme = React.useMemo(() => {
     if (forcedTheme) return forcedTheme;
-    if (!enableSystem) return defaultTheme;
     return defaultTheme;
-  }, [forcedTheme, enableSystem, defaultTheme]);
+  }, [forcedTheme, defaultTheme]);
 
   // Add CSS variables for theme transitions
   React.useEffect(() => {
@@ -83,9 +85,10 @@ export function ThemeProvider({
     updateRootClass(mediaQuery);
 
     // Listen for system theme changes
-    mediaQuery.addEventListener('change', updateRootClass);
+    const listener = (e: MediaQueryListEvent) => updateRootClass(e);
+    mediaQuery.addEventListener('change', listener);
 
-    return () => mediaQuery.removeEventListener('change', updateRootClass);
+    return () => mediaQuery.removeEventListener('change', listener);
   }, [enableSystem, forcedTheme]);
 
   return (
@@ -99,7 +102,6 @@ export function ThemeProvider({
       storageKey={storageKey}
       themes={['light', 'dark', 'system']}
     >
-      {/* Prevent theme switch flicker on load when using forced themes */}
       <style jsx global>{`
         :root {
           --theme-transition: ${disableTransitionOnChange
@@ -126,43 +128,22 @@ export function ThemeProvider({
 
 // Hook for using the theme in components
 export function useTheme() {
-  const context = React.useContext(NextThemesProvider);
-  if (context === undefined) {
+  const context = useNextTheme();
+  if (!context) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
 }
 
-// Utility function to get the current theme
+// Utility function to get the current theme with error handling
 export function getTheme(): Theme {
   if (typeof window === 'undefined') return FALLBACK_THEME;
-  return (localStorage.getItem(STORAGE_KEY) as Theme) || FALLBACK_THEME;
+  
+  try {
+    const storedTheme = localStorage.getItem(STORAGE_KEY) as Theme;
+    return storedTheme || FALLBACK_THEME;
+  } catch (error) {
+    console.warn('Failed to access localStorage:', error);
+    return FALLBACK_THEME;
+  }
 }
-
-// Example usage:
-/*
-import { ThemeProvider } from './theme-provider'
-
-// In your app layout:
-export default function RootLayout({ children }) {
-  return (
-    <html suppressHydrationWarning>
-      <head />
-      <body>
-        <ThemeProvider
-          defaultTheme="system"
-          enableSystem={true}
-          storageKey="x-activity-theme"
-        >
-          {children}
-        </ThemeProvider>
-      </body>
-    </html>
-  )
-}
-
-// For email previews or static rendering:
-<ThemeProvider forcedTheme="light">
-  <EmailPreview />
-</ThemeProvider>
-*/

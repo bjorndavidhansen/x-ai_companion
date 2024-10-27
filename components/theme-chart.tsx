@@ -1,60 +1,120 @@
 'use client';
 
+import React, { useMemo } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
-import { Theme } from '@/lib/types';
+import { Card } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import type { Theme } from '@/lib/types';
 
-const CHART_COLORS = [
-  'var(--theme-color-1, #4f46e5)',  // Primary
-  'var(--theme-color-2, #14b8a6)',  // Secondary
-  'var(--theme-color-3, #f59e0b)',  // Warning
-  'var(--theme-color-4, #ef4444)',  // Danger
-  'var(--theme-color-5, #8b5cf6)',  // Info
-];
+// Constants
+const CHART_COLORS = {
+  primary: 'hsl(var(--chart-1))',
+  secondary: 'hsl(var(--chart-2))',
+  tertiary: 'hsl(var(--chart-3))',
+  quaternary: 'hsl(var(--chart-4))',
+  quinary: 'hsl(var(--chart-5))'
+} as const;
 
+const CHART_COLOR_ARRAY = Object.values(CHART_COLORS);
+
+const DEFAULTS = {
+  MIN_PERCENTAGE: 1,
+  MIN_HEIGHT: 300,
+  MAX_HEIGHT: 600,
+  INNER_RADIUS_RATIO: 0.2,
+  OUTER_RADIUS_RATIO: 0.35,
+  MAX_RADIUS: 150,
+  LABEL_MIN_PERCENTAGE: 5,
+  TOOLTIP_ANIMATION_DURATION: 200,
+  LEGEND_PADDING_TOP: 20
+} as const;
+
+// Types
 interface ThemeChartProps {
-  themes: Theme[];
-  height?: number;
+  readonly themes: ReadonlyArray<Theme>;
+  readonly height?: number;
+  readonly isLoading?: boolean;
+  readonly minPercentage?: number;
+  readonly showConfidence?: boolean;
+  readonly onThemeClick?: (theme: Theme) => void;
+}
+
+interface ProcessedTheme extends Theme {
+  readonly percentage: number;
+  readonly color: string;
 }
 
 interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{
-    payload: Theme & { percentage: number };
+  readonly active?: boolean;
+  readonly payload?: ReadonlyArray<{
+    readonly payload: ProcessedTheme;
   }>;
+  readonly showConfidence?: boolean;
 }
 
-const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
+// Helper functions
+const calculatePercentage = (count: number, total: number): number => 
+  (count / total) * 100;
+
+const processThemeData = (
+  themes: ReadonlyArray<Theme>, 
+  minPercentage: number
+): ReadonlyArray<ProcessedTheme> => {
+  const totalCount = themes.reduce((acc, theme) => acc + theme.contentCount, 0);
+  
+  return themes
+    .map((theme, index) => ({
+      ...theme,
+      percentage: calculatePercentage(theme.contentCount, totalCount),
+      color: CHART_COLOR_ARRAY[index % CHART_COLOR_ARRAY.length]
+    }))
+    .filter(theme => theme.percentage >= minPercentage)
+    .sort((a, b) => b.contentCount - a.contentCount);
+};
+
+// Components
+const CustomTooltip: React.FC<CustomTooltipProps> = ({ 
+  active, 
+  payload, 
+  showConfidence 
+}) => {
   if (!active || !payload?.[0]) return null;
   
   const data = payload[0].payload;
+  
   return (
     <div className="bg-background border rounded-lg p-3 shadow-lg">
       <p className="font-medium">{data.name}</p>
       <p className="text-sm text-muted-foreground">
-        Content Items: {data.contentCount}
+        Content Items: {data.contentCount.toLocaleString()}
       </p>
       <p className="text-sm text-muted-foreground">
-        Confidence: {Math.round(data.confidence * 100)}%
+        Percentage: {data.percentage.toFixed(1)}%
       </p>
+      {showConfidence && typeof data.confidence === 'number' && (
+        <p className="text-sm text-muted-foreground">
+          Confidence: {(data.confidence * 100).toFixed(1)}%
+        </p>
+      )}
     </div>
   );
 };
 
-function renderCustomizedLabel(
-  cx: number, 
-  cy: number, 
-  midAngle: number, 
-  innerRadius: number, 
-  outerRadius: number, 
-  percentage: number
-) {
+const ChartLabel: React.FC<{
+  readonly cx: number;
+  readonly cy: number;
+  readonly midAngle: number;
+  readonly innerRadius: number;
+  readonly outerRadius: number;
+  readonly percentage: number;
+}> = ({ cx, cy, midAngle, innerRadius, outerRadius, percentage }) => {
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
-  // Only show label if percentage is significant enough
-  if (percentage < 5) return null;
+  if (percentage < DEFAULTS.LABEL_MIN_PERCENTAGE) return null;
 
   return (
     <text
@@ -63,65 +123,124 @@ function renderCustomizedLabel(
       fill="white"
       textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
-      className="text-xs font-medium"
+      className="text-xs font-medium fill-current"
     >
       {`${percentage.toFixed(0)}%`}
     </text>
   );
-}
+};
 
-export function ThemeDistributionChart({ themes, height = 400 }: ThemeChartProps) {
-  // Calculate percentages and sort by content count
-  const processedData = themes
-    .map(theme => ({
-      ...theme,
-      percentage: (theme.contentCount / themes.reduce((acc, t) => acc + t.contentCount, 0)) * 100
-    }))
-    .sort((a, b) => b.contentCount - a.contentCount);
+const LoadingState: React.FC<{ readonly height: number }> = ({ height }) => (
+  <div 
+    className="flex items-center justify-center" 
+    style={{ height }}
+    aria-label="Loading chart"
+  >
+    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+  </div>
+);
 
-  // Filter out themes with very low percentages for better visualization
-  const significantThemes = processedData.filter(theme => theme.percentage >= 1);
-  
+const EmptyState: React.FC = () => (
+  <Alert>
+    <AlertCircle className="h-4 w-4" />
+    <AlertDescription>
+      No theme data available to display.
+    </AlertDescription>
+  </Alert>
+);
+
+export const ThemeDistributionChart: React.FC<ThemeChartProps> = ({ 
+  themes,
+  height = DEFAULTS.MIN_HEIGHT,
+  isLoading = false,
+  minPercentage = DEFAULTS.MIN_PERCENTAGE,
+  showConfidence = false,
+  onThemeClick
+}) => {
+  const chartHeight = Math.min(
+    Math.max(height, DEFAULTS.MIN_HEIGHT),
+    DEFAULTS.MAX_HEIGHT
+  );
+
+  const processedThemes = useMemo(() => 
+    processThemeData(themes, minPercentage),
+    [themes, minPercentage]
+  );
+
+  // Handle loading state
+  if (isLoading) {
+    return <LoadingState height={chartHeight} />;
+  }
+
+  // Handle empty state
+  if (!themes.length) {
+    return <EmptyState />;
+  }
+
+  // If no themes meet the minimum percentage threshold
+  if (!processedThemes.length) {
+    return (
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          No themes meet the minimum percentage threshold of {minPercentage}%.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const handleClick = (data: ProcessedTheme) => {
+    onThemeClick?.(data);
+  };
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
+    <ResponsiveContainer width="100%" height={chartHeight}>
       <PieChart>
         <Pie
-          data={significantThemes}
+          data={processedThemes}
           dataKey="contentCount"
           nameKey="name"
           cx="50%"
           cy="50%"
-          outerRadius={Math.min(height * 0.35, 150)}
-          innerRadius={Math.min(height * 0.2, 60)}
+          outerRadius={Math.min(chartHeight * DEFAULTS.OUTER_RADIUS_RATIO, DEFAULTS.MAX_RADIUS)}
+          innerRadius={Math.min(chartHeight * DEFAULTS.INNER_RADIUS_RATIO, DEFAULTS.MAX_RADIUS * 0.4)}
           labelLine={false}
-          label={({
-            cx,
-            cy,
-            midAngle,
-            innerRadius,
-            outerRadius,
-            percentage,
-          }) => renderCustomizedLabel(cx, cy, midAngle, innerRadius, outerRadius, percentage)}
+          onClick={handleClick}
+          label={({ cx, cy, midAngle, innerRadius, outerRadius, percentage }) => (
+            <ChartLabel
+              cx={cx}
+              cy={cy}
+              midAngle={midAngle}
+              innerRadius={innerRadius}
+              outerRadius={outerRadius}
+              percentage={percentage}
+            />
+          )}
         >
-          {significantThemes.map((_, index) => (
+          {processedThemes.map((theme) => (
             <Cell 
-              key={`cell-${index}`} 
-              fill={CHART_COLORS[index % CHART_COLORS.length]}
-              className="hover:opacity-80 transition-opacity duration-200"
+              key={theme.id}
+              fill={theme.color}
+              className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
             />
           ))}
         </Pie>
         <Tooltip 
-          content={<CustomTooltip />} 
-          animationDuration={200}
+          content={<CustomTooltip showConfidence={showConfidence} />} 
+          animationDuration={DEFAULTS.TOOLTIP_ANIMATION_DURATION}
         />
         <Legend 
           layout="horizontal" 
           verticalAlign="bottom" 
           align="center"
-          wrapperStyle={{ paddingTop: '20px' }}
+          wrapperStyle={{ paddingTop: DEFAULTS.LEGEND_PADDING_TOP }}
+          formatter={(value: string) => (
+            <span className="text-sm text-foreground">{value}</span>
+          )}
         />
       </PieChart>
     </ResponsiveContainer>
   );
-}
+};
+
+export type { ThemeChartProps, ProcessedTheme };

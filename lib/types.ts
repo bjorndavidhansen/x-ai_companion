@@ -1,4 +1,3 @@
-// This is the complete content for lib/types.ts
 import { z } from 'zod';
 
 export const ThemeSchema = z.object({
@@ -16,5 +15,9 @@ export const ContentSchema = z.object({
   createdAt: z.string()
 });
 
+// Add explicit type exports
 export type Theme = z.infer<typeof ThemeSchema>;
 export type Content = z.infer<typeof ContentSchema>;
+
+// Add ContentType type for better type safety
+export type ContentType = z.infer<typeof ContentSchema>['type'];
