@@ -1,17 +1,76 @@
+// env.ts
 import { z } from 'zod';
 
 const envSchema = z.object({
-  NEXT_PUBLIC_API_URL: z.string().url(),
-  NEXT_PUBLIC_APP_URL: z.string().url(),
-  X_CLIENT_ID: z.string(),
+  // Required in production, optional in development
+  NEXT_PUBLIC_API_URL: z.string().url()
+    .or(z.string().optional())
+    .transform(val => val || 'http://localhost:3000'),
+  
+  NEXT_PUBLIC_APP_URL: z.string().url()
+    .or(z.string().optional())
+    .transform(val => val || 'http://localhost:3000'),
+  
+  // Optional auth credentials
+  X_CLIENT_ID: z.string()
+    .optional(),
+  
   X_CLIENT_SECRET: z.string()
+    .optional(),
+
+  // Environment with default
+  NODE_ENV: z.enum(['development', 'production', 'test'])
+    .optional()
+    .default('development'),
 });
 
-export function validateEnv() {
+// Create type from schema
+export type Env = z.infer<typeof envSchema>;
+
+// Validate and export environment
+export function validateEnv(): Env {
   try {
-    envSchema.parse(process.env);
+    const env = envSchema.parse(process.env);
+
+    // Only enforce strict validation in production
+    if (env.NODE_ENV === 'production') {
+      // Ensure required variables are present in production
+      if (!env.NEXT_PUBLIC_API_URL) {
+        throw new Error('API URL is required in production');
+      }
+      if (!env.NEXT_PUBLIC_APP_URL) {
+        throw new Error('APP URL is required in production');
+      }
+      if (!env.X_CLIENT_ID || !env.X_CLIENT_SECRET) {
+        throw new Error('Client credentials are required in production');
+      }
+    }
+
+    return env;
   } catch (error) {
-    console.error('Invalid environment variables:', error);
-    throw new Error('Invalid environment variables');
+    if (error instanceof z.ZodError) {
+      console.error('Environment validation failed:', error.errors);
+    } else {
+      console.error('Environment validation failed:', error);
+    }
+    
+    // In development, return defaults instead of throwing
+    if (process.env.NODE_ENV !== 'production') {
+      return {
+        NEXT_PUBLIC_API_URL: 'http://localhost:3000',
+        NEXT_PUBLIC_APP_URL: 'http://localhost:3000',
+        NODE_ENV: 'development'
+      } as Env;
+    }
+    
+    throw error;
   }
 }
+
+// Export validated env
+export const env = validateEnv();
+
+// Helper functions
+export const isProd = env.NODE_ENV === 'production';
+export const isDev = env.NODE_ENV === 'development';
+export const isTest = env.NODE_ENV === 'test';
