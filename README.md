@@ -162,7 +162,3 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 ## **Contact**
 Created by [Bjorn David Hansen](https://github.com/bjorndavidhansen).  
 Feel free to reach out if you have any questions or feedback!
-
----
-
-This README provides all the necessary information to set up, run, and contribute to the project. It’s structured to make it easy for other developers or users to understand the purpose and usage of the project.
