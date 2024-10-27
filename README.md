@@ -1,6 +1,4 @@
-Here’s a well-structured and detailed `README.md` tailored for your **X Activity Companion** project:
-
----
+**Work in progress.**
 
 # **X Activity Companion**  
 
